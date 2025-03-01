@@ -21,7 +21,7 @@ impl<'a> Pokemon<'a> {
         let level = self.level as f32;
         match stat {
             Stat::HP=> ((2.0*base_stat + iv + ev/4.0)*level/100.0 + level + 10.0) as u16,
-            _ => (((2.0*base_stat + iv + ev/4.0)*level/100.0 + 5.0) * nature_multiplier).floor() as u16,
+            _ => (((2.0*base_stat + iv + ev/4.0)*level/100.0 + 5.0).floor() * nature_multiplier).floor() as u16,
         }
     }
 }

@@ -30,6 +30,9 @@ impl DamageRange {
     pub fn floored_multiply(&mut self, value:CalcFloat) {
         self.0 = self.0.map(|damage| (damage as CalcFloat * value).floor() as CalcInt);
     }
+    pub fn ceiled_multiply(&mut self, value:CalcFloat) {
+        self.0 = self.0.map(|damage| (damage as CalcFloat * value).ceil() as CalcInt);
+    }
 }
 impl Default for DamageRange {
     fn default() -> Self {
@@ -75,7 +78,7 @@ fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, 
     let mut attack = attacker_stat_source.stat(offence_stat) as CalcFloat;
     let mut defence = defender.stat(defence_stat) as CalcFloat;
     let mut power = move_.base_power as CalcFloat;
-    let mut damage_resistance = 1.0;
+    let mut other_modifications = 1.0;
 
     let multi_target = move_.target.is_multi_target();
 
@@ -187,17 +190,17 @@ fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, 
         }
 
         //TODO Disguise
-        if defender.ability == Ability::DrySkin && current_move_type == Type::Fire  {damage_resistance *= 0.8};
-        if defender.ability == Ability::Fluffy  && current_move_type == Type::Fire {damage_resistance *= 0.5};
-        if defender.ability == Ability::Fluffy && move_.has_flag(Flag::Contact) {damage_resistance *= 2.0};
+        if defender.ability == Ability::DrySkin && current_move_type == Type::Fire  {other_modifications *= 0.8};
+        if defender.ability == Ability::Fluffy  && current_move_type == Type::Fire {other_modifications *= 0.5};
+        if defender.ability == Ability::Fluffy && move_.has_flag(Flag::Contact) {other_modifications *= 2.0};
         if defender.ability == Ability::Heatproof && current_move_type == Type::Fire {attack *= 0.5};
         //TODO Multiscale
         //TODO Shadow Shield (NOT INGORABLE)
-        if defender.ability == Ability::PunkRock && move_.has_flag(Flag::Contact) {damage_resistance *= 2.0};
+        if defender.ability == Ability::PunkRock && move_.has_flag(Flag::Contact) {other_modifications *= 2.0};
         if defender.ability == Ability::PurifyingSalt && current_move_type == Type::Ghost {attack *= 0.5};
         if defender.ability == Ability::ThickFat && (current_move_type == Type::Fire || current_move_type == Type::Ice) {attack *= 0.5};
-        if defender.ability == Ability::WaterBubble && current_move_type == Type::Fire {damage_resistance *= 2.0};
-        if defender.ability == Ability::IceScales && move_.category == Category::Special {damage_resistance *= 2.0};
+        if defender.ability == Ability::WaterBubble && current_move_type == Type::Fire {other_modifications *= 2.0};
+        if defender.ability == Ability::IceScales && move_.category == Category::Special {other_modifications *= 2.0};
     }
         
     let target_multiplier = match (doubles, multi_target) {
@@ -236,7 +239,7 @@ fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, 
     let attack = pokemon_round(attack);
     let power = pokemon_round(power);
     let defence = pokemon_round(defence);
-    let mut damage = ((level*2.0/5.0 + 2.0)*power*attack/defence/50.0 + 2.0).round(); // Diverges from bulbapedia
+    let mut damage = (((level*2.0/5.0 + 2.0).floor()*power*attack/defence).floor()/50.0 + 2.0).floor(); // From showdown, diverges from bulbapedia
 
     damage = pokemon_round(damage * target_multiplier);
     // Parental Bond
@@ -244,12 +247,12 @@ fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, 
     // Glaive Rush
     if move_.will_crit {damage = (damage * 1.5).floor()};
     let mut random = DamageRange::new();
-    random.floored_multiply(damage/100.0); // Diverges from bulbapedia
+    random.floored_multiply(damage/100.0); // From showdown, diverges from bulbapedia
     let mut damage = random;
-    damage.pokerounded_multiply(stab_multiplier);
+    damage.floored_multiply(stab_multiplier); // From showdown, diverges from bulbapedia
     damage.floored_multiply(type_multiplier);
     // BURN
-    damage.pokerounded_multiply(damage_resistance);
+    damage.pokerounded_multiply(other_modifications);
     // ZMOVE
     // TERA SHIELD
     damage.pokerounded_multiply(n_hits as f32);
@@ -324,6 +327,7 @@ impl<'a> ReadyCalc<'a>{
 
 
 #[cfg(test)]
+#[cfg(feature = "real_data")]
 mod tests {
     use std::fmt::Debug;
 
