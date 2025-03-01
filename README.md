@@ -1,0 +1,1 @@
+Data copied from https://github.com/pkmn/ps/tree/main/dex/data, which is distributed under the MIT licence.
