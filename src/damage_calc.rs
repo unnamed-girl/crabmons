@@ -1,15 +1,15 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use crate::moves::{Category, Flag, Move, MultiHit, OverrideOffensivePokemon};
 use crate::pokemon::Pokemon;
 use crate::species::{Ability, Stat};
-use crate::dex::{DexError, GenDex, Identifier};
+use crate::dex::{Dex, DexError, Identifier};
 use crate::types::{DamageRelation, Type};
 
 type CalcInt = u32;
 type CalcFloat = f32;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DamageRange(pub [CalcInt; 16]);
 impl DamageRange {
     pub fn new() -> Self {
@@ -23,6 +23,9 @@ impl DamageRange {
     }
     pub fn pokerounded_multiply(&mut self, value:CalcFloat) {
         self.0 = self.0.map(|damage| pokemon_round(damage as CalcFloat * value) as CalcInt);
+    }
+    pub fn rounded_multiply(&mut self, value:CalcFloat) {
+        self.0 = self.0.map(|damage| (damage as CalcFloat * value).round() as CalcInt);
     }
     pub fn floored_multiply(&mut self, value:CalcFloat) {
         self.0 = self.0.map(|damage| (damage as CalcFloat * value).floor() as CalcInt);
@@ -38,11 +41,6 @@ impl PartialEq<[CalcInt; 16]> for DamageRange {
         self.0 == *other   
     }    
 }
-impl PartialEq for DamageRange {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
 
 const EPSILON:CalcFloat = 0.00001;
 fn pokemon_round(value: CalcFloat) -> CalcFloat {
@@ -51,7 +49,7 @@ fn pokemon_round(value: CalcFloat) -> CalcFloat {
 
 const ZERO_DAMAGE: DamageRange = DamageRange([0;16]);
 
-fn damage_calc(dex: &GenDex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, doubles: bool) -> DamageRange {
+fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, doubles: bool) -> DamageRange {
     if move_.category == Category::Status {
         return ZERO_DAMAGE;
     }
@@ -220,7 +218,8 @@ fn damage_calc(dex: &GenDex, attacker: &Pokemon, defender: &Pokemon, move_: &Mov
 
     let mut type_multiplier = 1.0;
     for type_ in &defender.species.types {
-        type_multiplier *= match dex.type_(type_).and_then(|data| data.damage_taken.get(&current_move_type).ok_or(DexError::NotFound(current_move_type.to_string()))).unwrap() {
+        let type_ = dex.type_(type_).expect("Dex to handle all types") ;
+        type_multiplier *= match type_.damage_taken(current_move_type) {
             DamageRelation::Immune => 0.0,
             DamageRelation::NotVeryEffective => 0.5,
             DamageRelation::Neutral => 1.0,
@@ -237,18 +236,18 @@ fn damage_calc(dex: &GenDex, attacker: &Pokemon, defender: &Pokemon, move_: &Mov
     let attack = pokemon_round(attack);
     let power = pokemon_round(power);
     let defence = pokemon_round(defence);
-    let mut damage = ((level*2.0/5.0 + 2.0)*power*attack/defence/50.0 + 2.0).floor();
+    let mut damage = ((level*2.0/5.0 + 2.0)*power*attack/defence/50.0 + 2.0).round(); // Diverges from bulbapedia
 
     damage = pokemon_round(damage * target_multiplier);
     // Parental Bond
     // Weather
     // Glaive Rush
-    if move_.will_crit {damage = (damage * 1.5).floor()}; // Crits round down
+    if move_.will_crit {damage = (damage * 1.5).floor()};
     let mut random = DamageRange::new();
-    random.floored_multiply(damage/100.0); // Seems like randomisation rounds down
+    random.floored_multiply(damage/100.0); // Diverges from bulbapedia
     let mut damage = random;
     damage.pokerounded_multiply(stab_multiplier);
-    damage.floored_multiply(type_multiplier); // type multiplier rounds down
+    damage.floored_multiply(type_multiplier);
     // BURN
     damage.pokerounded_multiply(damage_resistance);
     // ZMOVE
@@ -259,7 +258,7 @@ fn damage_calc(dex: &GenDex, attacker: &Pokemon, defender: &Pokemon, move_: &Mov
 
 
 pub trait MaybeAPokemon {}
-impl<'a> MaybeAPokemon for &'a Pokemon<'a> {}
+impl MaybeAPokemon for Pokemon<'_> {}
 impl MaybeAPokemon for () {}
 
 pub trait MaybeAMove {}
@@ -267,8 +266,14 @@ impl MaybeAMove for &Move {}
 impl MaybeAMove for () {}
 
 #[derive(Clone, Copy)]
-pub struct CalcBuilder<'a, Attacker: MaybeAPokemon, Defender: MaybeAPokemon, Move: MaybeAMove>(&'a GenDex, Attacker, Defender, Move);
-type ReadyCalc<'a> = CalcBuilder<'a, &'a Pokemon<'a>, &'a Pokemon<'a>, &'a Move>;
+pub struct CalcBuilder<'a, Attacker: MaybeAPokemon, Defender: MaybeAPokemon, Move: MaybeAMove>(&'a Dex, Attacker, Defender, Move);
+type ReadyCalc<'a> = CalcBuilder<'a, Pokemon<'a>, Pokemon<'a>, &'a Move>;
+
+impl Display for ReadyCalc<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {} -> {}", self.1.species.name, self.3.name, self.2.species.name)
+    }
+}
 
 pub struct CalcOutcome<'a>(DamageRange, ReadyCalc<'a>);
 impl CalcOutcome<'_> {
@@ -280,18 +285,18 @@ impl CalcOutcome<'_> {
     }
 }
 
-impl GenDex {
-    pub fn calc(&self) -> CalcBuilder<'_, (), (), ()> {
+impl Dex {
+    pub fn calc(&self) -> CalcBuilder<(), (), ()> {
         CalcBuilder(self, (), (), ())
     }
 }
 impl<'a, D: MaybeAPokemon, M: MaybeAMove> CalcBuilder<'a, (), D, M> {
-    pub fn attacker(self, attacker: &'a Pokemon<'a>) -> CalcBuilder<'a, &'a Pokemon<'a>, D, M> {
+    pub fn attacker(self, attacker: Pokemon<'a>) -> CalcBuilder<'a, Pokemon<'a>, D, M> {
         CalcBuilder(self.0, attacker, self.2, self.3)
     }
 }
 impl<'a, A: MaybeAPokemon, B: MaybeAMove> CalcBuilder<'a, A, (), B> {
-    pub fn defender(self, defender: &'a Pokemon<'a>) -> CalcBuilder<'a, A, &'a Pokemon<'a>, B> {
+    pub fn defender(self, defender: Pokemon<'a>) -> CalcBuilder<'a, A, Pokemon<'a>, B> {
         CalcBuilder(self.0, self.1, defender, self.3)
     }
 }
@@ -301,8 +306,8 @@ impl<'a, A: MaybeAPokemon, D: MaybeAPokemon> CalcBuilder<'a, A, D, ()> {
         Ok(CalcBuilder(self.0, self.1, self.2, move_))
     }
 }
-impl<'a> CalcBuilder<'a,&'a  Pokemon<'a>, &'a Pokemon<'a>, ()> {
-    pub fn all_possible_attacks(self) -> Result<Vec<CalcBuilder<'a, &'a Pokemon<'a>, &'a Pokemon<'a>, &'a Move>>, DexError> {
+impl<'a> CalcBuilder<'a, Pokemon<'a>, Pokemon<'a>, ()> {
+    pub fn all_possible_attacks(self) -> Result<Vec<CalcBuilder<'a, Pokemon<'a>, Pokemon<'a>, &'a Move>>, DexError> {
         let learnset = self.0.learnset(&self.1.species.name)?;
         Ok(learnset.all_moves().iter()
             .flat_map(|move_| self.move_(move_))
@@ -312,7 +317,7 @@ impl<'a> CalcBuilder<'a,&'a  Pokemon<'a>, &'a Pokemon<'a>, ()> {
 }
 impl<'a> ReadyCalc<'a>{
     pub fn calc(self, doubles: bool) -> CalcOutcome<'a> {
-        let result = damage_calc(self.0, self.1, self.2, self.3, doubles);
+        let result = damage_calc(self.0, &self.1, &self.2, self.3, doubles);
         CalcOutcome(result, self)
     }
 }
@@ -322,43 +327,42 @@ impl<'a> ReadyCalc<'a>{
 mod tests {
     use std::fmt::Debug;
 
-    use crate::{dex::{DexError, GenDex}, natures::Nature, pokemon::PokemonBuilder, species::Stat};
+    use crate::{dex::{Dex, DexError}, natures::Nature, species::Stat};
 
     use super::{CalcOutcome, DamageRange};
 
-    impl<'a> CalcOutcome<'a> {
+    impl CalcOutcome<'_> {
         pub fn assert<T>(&self, value: T) where DamageRange: PartialEq<T>, T: Debug {
-            assert_eq!(self.0, value)
+            assert_eq!(self.0, value, "{}", self.1)
         }
     }
 
     #[test]
     fn damage_calc_tests() -> Result<(), DexError> {
-        let dex = GenDex::default();
+        let dex = Dex::default();
 
-        let punching_bag = PokemonBuilder::new(&dex, "flareon")?
+        let punching_bag = dex.pokemon("flareon")?
             .ev(Stat::Defence, 99)
             .ev(Stat::SpecialDefence, 99)
             .nature(dex.nature(Nature::Bold)?);
 
         // EVS
-        let rillaboom = PokemonBuilder::new(&dex, "rillaboom")?
+        let rillaboom = dex.pokemon("rillaboom")?
             .ev(Stat::Attack, 184)
             .nature(dex.nature(Nature::Adamant)?);
-        dex.calc().attacker(&rillaboom).defender(&punching_bag).move_("stompingtantrum")?.calc(true).assert([104, 106, 106, 108, 110, 110, 112, 114, 114, 116, 116, 118, 120, 120, 122, 124]);
+        dex.calc().attacker(rillaboom).defender(punching_bag).move_("stompingtantrum")?.calc(true).assert([104, 106, 106, 108, 110, 110, 112, 114, 114, 116, 116, 118, 120, 120, 122, 124]);
 
         // Resisted attack
-        let swampert = PokemonBuilder::new(&dex, "swampert")?;
-        dex.calc().attacker(&swampert).defender(&swampert).move_("hydropump")?.calc(true).assert([60, 61, 61, 63, 63, 64, 64, 66, 66, 67, 67, 69, 69, 70, 70, 72]);
+        let swampert = dex.pokemon("swampert")?;
+        dex.calc().attacker(swampert).defender(swampert).move_("hydropump")?.calc(true).assert([60, 61, 61, 63, 63, 64, 64, 66, 66, 67, 67, 69, 69, 70, 70, 72]);
         
         // AutoCrit Moves
-        let urshifu_rs = PokemonBuilder::new(&dex, "urshifurapidstrike")?;
-        dex.calc().attacker(&urshifu_rs).defender(&punching_bag).move_("surgingstrikes")?.calc(true).assert([198, 204, 204, 204, 216, 216, 216, 216, 222, 222, 222, 222, 234, 234, 234, 240]);
+        let urshifu_rs = dex.pokemon("urshifurapidstrike")?;
+        dex.calc().attacker(urshifu_rs).defender(punching_bag).move_("surgingstrikes")?.calc(true).assert([198, 204, 204, 204, 216, 216, 216, 216, 222, 222, 222, 222, 234, 234, 234, 240]);
         
-        let swampert = PokemonBuilder::new(&dex, "swampert")?
+        let swampert = dex.pokemon("swampert")?
             .ev(Stat::Attack, 252);
-        dex.calc().attacker(&swampert).defender(&punching_bag).move_("wickedblow")?.calc(true).assert([68, 69, 70, 71, 72, 72, 73, 74, 75, 76, 76, 77, 78, 79, 80, 81]);
-        
+        dex.calc().attacker(swampert).defender(punching_bag).move_("wickedblow")?.calc(true).assert([68, 69, 70, 71, 72, 72, 73, 74, 75, 76, 76, 77, 78, 79, 80, 81]);
         
         Ok(())
     }

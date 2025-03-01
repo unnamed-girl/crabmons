@@ -1,7 +1,6 @@
-use std::ops::{Deref, DerefMut};
+use crate::{natures::NatureData, species::{Ability, Species, Stat, StatDistribution}};
 
-use crate::{dex::{DexError, GenDex, Identifier}, natures::NatureData, species::{Ability, Species, Stat, StatDistribution}};
-
+#[derive(Clone, Copy)]
 pub struct Pokemon<'a> {
     pub species: &'a Species,
     pub level: u8,
@@ -27,44 +26,25 @@ impl<'a> Pokemon<'a> {
     }
 }
 
-pub struct PokemonBuilder<'a> {
-    pokemon: Pokemon<'a>
-}
-impl<'a> Deref for PokemonBuilder<'a> {
-    type Target = Pokemon<'a>;
-    fn deref(&self) -> &Self::Target {
-        &self.pokemon
-    }
-}
-impl DerefMut for PokemonBuilder<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.pokemon
-    }
-}
-impl<'a> PokemonBuilder<'a> {
-    pub fn new<Id:Identifier>(dex: &'a GenDex, species:Id) -> Result<Self, DexError> {
-        let species = dex.species(species)?;
-        let pokemon = Pokemon::new(species);
-        Ok(Self { pokemon })
-    }
+impl<'a> Pokemon<'a> {
     pub fn ivs(mut self, ivs:impl Into<StatDistribution>) -> Self {
-        self.pokemon.ivs = ivs.into();
+        self.ivs = ivs.into();
         self
     }
     pub fn evs(mut self, evs:impl Into<StatDistribution>) -> Self {
-        self.pokemon.evs = evs.into();
+        self.evs = evs.into();
         self
     }
     pub fn iv(mut self, stat:Stat, iv:u8) -> Self {
-        *self.pokemon.ivs.get_mut(stat) = iv;
+        *self.ivs.get_mut(stat) = iv;
         self
     }
     pub fn ev(mut self, stat:Stat, ev:u8) -> Self {
-        *self.pokemon.evs.get_mut(stat) = ev;
+        *self.evs.get_mut(stat) = ev;
         self
     }
     pub fn level(mut self, level:u8) -> Self {
-        self.pokemon.level = level;
+        self.level = level;
         self
     }
     pub fn nature(mut self, nature: &'a NatureData) -> Self {

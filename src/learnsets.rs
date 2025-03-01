@@ -20,7 +20,7 @@ impl Learnset {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Encounter {
     pub generation: u8,
     pub level: u8

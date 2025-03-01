@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{species::Stat, types::Type};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Move {
     pub num: i32,
@@ -104,6 +104,7 @@ impl Move {
     }
 }
 
+#[derive(Clone)]
 pub enum MaxMove {
     TypeBased,
     ForPokemon(String)
@@ -123,6 +124,7 @@ impl<'de> Deserialize<'de> for MaxMove {
     }
 }
 
+#[derive(Clone)]
 pub enum IgnoreImmunity {
     True,
     False,
@@ -151,6 +153,8 @@ impl<'de> Deserialize<'de> for IgnoreImmunity {
     ))
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Accuracy {
     AlwaysHits,
     Percent(u8)
@@ -169,12 +173,14 @@ impl<'de> Deserialize<'de> for Accuracy {
     ))
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AlternativeDamage {
     Flat(u8),
     Unique(UniqueDamage)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum UniqueDamage {
     #[serde(rename = "level")]
     Level
@@ -193,7 +199,7 @@ impl<'de> Deserialize<'de> for AlternativeDamage {
     ))
     }
 }
-
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MultiHit {
     Constant(u8),
     Range(u8, u8)
@@ -221,14 +227,14 @@ impl<'de> Deserialize<'de> for MultiHit {
     }
 }
 
-#[derive(Deserialize, PartialEq, Eq)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Category {
     Physical,
     Special,
     Status,
 }
 
-#[derive(PartialEq, Eq, Hash, Deserialize, Clone, Copy)]
+#[derive(Hash, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum Flag {
     AllyAnim,
@@ -269,6 +275,8 @@ pub enum Flag {
     Sound,
     Wind,
 }
+
+#[derive(Clone)]
 pub struct FlagList(pub Vec<Flag>);
 impl FlagList {
     pub fn has_flag(&self, flag: Flag) -> bool {
@@ -291,6 +299,7 @@ impl<'de> Deserialize<'de> for FlagList {
     }
 }
 
+#[derive(Clone)]
 pub struct BoostsList(pub Vec<(Stat, i8)>);
 impl<'de> Deserialize<'de> for BoostsList {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -309,7 +318,7 @@ impl<'de> Deserialize<'de> for BoostsList {
 }
 
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum Target {
     AllySide,
@@ -338,7 +347,7 @@ impl Target {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NonStandardReason {
     LGPE,
     Past,
@@ -347,7 +356,7 @@ pub enum NonStandardReason {
     Gigantamax,
     Unobtainable,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ContestType {
     Clever,
     Cute,
@@ -356,7 +365,7 @@ pub enum ContestType {
     Cool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum VolatileStatus {
     Minimize,
@@ -424,7 +433,7 @@ pub enum VolatileStatus {
     Reflect,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum SideCondition {
     Reflect,
@@ -443,6 +452,8 @@ pub enum SideCondition {
     StealthRock,
     LightScreen,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SelfSwitch {
     True,
     False,
@@ -453,7 +464,7 @@ impl Default for SelfSwitch {
         Self::False
     }
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum UniqueSelfSwitch {
     CopyVolatile,
@@ -475,7 +486,7 @@ impl<'de> Deserialize<'de> for SelfSwitch {
 }
 
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum Weather {
     Sandstorm,
     #[serde(rename = "sunnyday")]
@@ -487,13 +498,13 @@ pub enum Weather {
     Hail,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NonGhostTarget {
     #[serde(rename = "self")]
     Self_
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Status {
     #[serde(rename = "tox")]
     Toxic,
@@ -506,7 +517,7 @@ pub enum Status {
     #[serde(rename = "psn")]
     Poison,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Terrain {
     #[serde(rename = "mistyterrain")]
     Misty,
@@ -519,7 +530,7 @@ pub enum Terrain {
 }
 
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SelfDestruct {
     #[serde(rename = "always")]
     Always,
@@ -527,7 +538,7 @@ pub enum SelfDestruct {
     IfHit
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum PseudoWeather {
     IonDeluge,
@@ -539,6 +550,8 @@ pub enum PseudoWeather {
     Gravity,
     MudSport,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OHKO {
     Regular,
     Unique(UniqueOHKO)
@@ -556,18 +569,18 @@ impl<'de> Deserialize<'de> for OHKO {
         result.ok_or(serde::de::Error::custom(format!("{value} is not valid for OHKO")))
     }
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum UniqueOHKO {
     Ice
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OverrideOffensivePokemon {
     #[serde(rename = "target")]
     Target
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum SlotCondition {
     HealingWish,

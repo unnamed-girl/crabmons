@@ -49,7 +49,7 @@ impl Identifier for &Type {
 #[derive(Deserialize)]
 pub struct TypeData {
     #[serde(rename = "damageTaken")]
-    pub damage_taken: HashMap<Type, DamageRelation>,
+    damage_taken: HashMap<Type, DamageRelation>,
     #[serde(rename = "HPivs")]
     pub hpivs: Option<HashMap<Stat, u8>>,
     #[serde(rename = "HPdvs")]
@@ -57,8 +57,15 @@ pub struct TypeData {
     #[serde(rename = "isNonstandard")]
     pub is_non_standard: Option<NonStandardReason>,
 }
+impl TypeData {
+    pub fn damage_taken(&self, type_: Type) -> DamageRelation {
+        self.damage_taken.get(&type_)
+            .copied()
+            .unwrap_or(DamageRelation::Neutral)
+    }
+}
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(try_from = "u8")]
 pub enum DamageRelation {
     Neutral,

@@ -3,7 +3,7 @@ use std::{collections::HashMap, marker::PhantomData};
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::{Map, Value};
 
-use crate::{generation::{Generation, LATEST_GENERATION}, learnsets::Learnset, moves::{Move, NonStandardReason}, natures::NatureData, species::Species, types::TypeData, LEARNSETS_JSON, MOVES_JSON, NATURES_JSON, SPECIES_JSON, TYPES_JSON};
+use crate::{generation::{Generation, LATEST_GENERATION}, learnsets::Learnset, moves::{Move, NonStandardReason}, natures::NatureData, pokemon::Pokemon, species::Species, types::TypeData, LEARNSETS_JSON, MOVES_JSON, NATURES_JSON, SPECIES_JSON, TYPES_JSON};
 
 pub trait Dexable {
     fn initialise(&mut self, _gen: Generation) {} // Usually just check if this is a Future move.
@@ -19,22 +19,21 @@ impl<T: AsRef<str>> Identifier for T {
     }
 }
 
-pub struct GenDex {
-    pub gen: Generation,
+pub struct Dex {
     moves: DexData<Move>,
     species: DexData<Species>,
     types: DexData<TypeData>,
     learnsets: DexData<Learnset>,
     natures: DexData<NatureData>
 }
-impl Default for GenDex {
+impl Default for Dex {
     fn default() -> Self {
-        Self::new(LATEST_GENERATION)
+        Self::generation_dex(LATEST_GENERATION)
     }
 }
-impl GenDex {
-    pub fn new(gen: Generation) -> Self {
-        Self { gen, moves: DexData::new(gen), species: DexData::new(gen), types: DexData::new(gen), learnsets: DexData::new(gen), natures: DexData::new(gen) }
+impl Dex {
+    pub fn generation_dex(gen: Generation) -> Self {
+        Self { moves: DexData::new(gen), species: DexData::new(gen), types: DexData::new(gen), learnsets: DexData::new(gen), natures: DexData::new(gen) }
     }
 
 }
@@ -43,7 +42,7 @@ impl GenDex {
 pub enum DexError {
     NotFound(String)
 }
-impl GenDex {
+impl Dex {
     pub fn move_<Id: Identifier>(&self, identifier:Id) -> Result<&Move, DexError> {
         self.moves.get(identifier)
     }
@@ -58,6 +57,9 @@ impl GenDex {
     }
     pub fn nature<Id: Identifier>(&self, identifier:Id) -> Result<&NatureData, DexError> {
         self.natures.get(identifier)
+    }
+    pub fn pokemon<Id: Identifier>(&self, identifier:Id) -> Result<Pokemon, DexError> {
+        Ok(Pokemon::new(self.species(identifier)?))
     }
 }
 

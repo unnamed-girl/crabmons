@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::{moves::NonStandardReason, types::Type};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Species {
     pub num: i32,
@@ -57,14 +57,14 @@ pub struct Species {
     pub male_only_hidden: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq, Clone, Copy, Debug)]
 #[serde(rename_all = "UPPERCASE")]
 pub struct GenderRatio {
     pub f: f32,
     pub m: f32
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, PartialEq, Eq, Debug, Clone, Copy)]
 pub struct StatDistribution {
     pub hp: u8,
     pub atk: u8,

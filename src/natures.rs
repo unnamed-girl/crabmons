@@ -45,7 +45,7 @@ impl Identifier for Nature {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct NatureData {
     pub name: String,
     pub plus: Option<Stat>,
