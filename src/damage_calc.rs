@@ -1,10 +1,10 @@
 use std::fmt::{Debug, Display};
 
-use crate::moves::{Category, Flag, Move, MultiHit, OverrideOffensivePokemon};
+use crate::moves::{Category, Flag, Move, OverrideOffensivePokemon};
 use crate::pokemon::Pokemon;
 use crate::species::{Ability, Stat};
 use crate::dex::{Dex, DexError, Identifier};
-use crate::types::{DamageRelation, Type};
+use crate::types::Type;
 
 type CalcInt = u32;
 type CalcFloat = f32;
@@ -221,19 +221,11 @@ fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, 
 
     let mut type_multiplier = 1.0;
     for type_ in &defender.species.types {
-        let type_ = dex.type_(type_).expect("Dex to handle all types") ;
-        type_multiplier *= match type_.damage_taken(current_move_type) {
-            DamageRelation::Immune => 0.0,
-            DamageRelation::NotVeryEffective => 0.5,
-            DamageRelation::Neutral => 1.0,
-            DamageRelation::SuperEffective => 2.0,
-        }
+        let type_ = dex.type_(type_).expect("Dex to handle all types");
+        type_multiplier *= type_.damage_taken(current_move_type).to_multiplier();
     }
-    let n_hits = match move_.multihit {
-        Some(MultiHit::Constant(n)) => n,
-        Some(MultiHit::Range(_, max)) => max,
-        None => 1
-    };
+
+    let n_hits = move_.number_of_hits.max();
 
     let level = attacker.level as CalcFloat;
     let attack = pokemon_round(attack);

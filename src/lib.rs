@@ -7,6 +7,7 @@ pub mod generation;
 pub mod natures;
 pub mod pokemon;
 pub mod damage_calc;
+pub mod items;
 
 #[cfg(feature = "real_data")]
 pub mod real_data;

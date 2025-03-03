@@ -1,43 +1,45 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use crate::{species::Stat, types::Type};
+use crate::{items::Priorities, species::Stat, types::Type};
 
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct Move {
     pub num: i32,
     pub accuracy: Accuracy,
     pub base_power: u8,
     pub category: Category,
-    pub is_non_standard: Option<NonStandardReason>,
+    pub is_nonstandard: Option<NonStandardReason>,
     pub name: String,
     pub pp: u8,
     pub priority: i8,
     pub flags: FlagList,
     pub is_z: Option<String>,
     pub crit_ratio: Option<u8>,
-    // secondary
+    pub secondary: Option<Secondary>,
     pub target: Target,
     pub type_: Type,
     pub contest_type: Option<ContestType>,
+    #[serde(default)]
     #[serde(rename = "desc")]
-    pub description: Option<String>,
+    pub description: String,
+    #[serde(default)]
     #[serde(rename = "shortDesc")]
-    pub short_description: Option<String>,
+    pub short_description: String,
     pub drain: Option<(u8, u8)>,
-    pub boosts: Option<BoostsList>,
-    // z_move:
+    pub z_move: Option<ZMoveData>, // todo
     #[serde(default)] 
     pub base_power_callback: bool,
-    // condition
-    pub volatile_status: Option<VolatileStatus>,
-    pub multihit: Option<MultiHit>,
+    pub condition: Option<Condition>,
+    #[serde(default)]
+    #[serde(rename = "multihit")]
+    pub number_of_hits: NumberOfHits,
     #[serde(default)] 
     pub calls_move: bool,
-    pub side_condition: Option<SideCondition>,
     #[serde(default)] 
     pub has_crash_damage: bool,
     #[serde(default)] 
@@ -47,29 +49,25 @@ pub struct Move {
     #[serde(default)]
     pub ignore_immunity: IgnoreImmunity,
     pub override_offensive_stat: Option<Stat>,
-    // max_move
+    pub max_move: Option<MaxMoveData>,
     pub recoil: Option<(u8, u8)>,
-    pub weather: Option<Weather>,
     #[serde(default)] 
     pub ignore_defensive: bool,
     #[serde(default)] 
     pub ignore_evasion: bool,
     #[serde(default)] 
     pub force_switch: bool,
-    // self_boost
-    pub non_ghost_target: Option<NonGhostTarget>,
-    pub status: Option<Status>,
+    pub non_ghost_target: Option<NonGhostTarget>, // Curse
     #[serde(default)] 
     pub smart_target: bool,
     pub damage: Option<AlternativeDamage>,
     pub terrain: Option<Terrain>,
     #[serde(default)] 
-    pub has_sheer_force: bool,
-    pub self_destruct: Option<SelfDestruct>,
-    pub pseudo_weather: Option<PseudoWeather>,
+    pub has_sheer_force: bool, // Applies sheer force but secondary effects still happen.
+    pub selfdestruct: Option<SelfDestruct>,
     #[serde(default)] 
     pub breaks_protect: bool,
-    // secondaries
+    pub secondaries: Option<Vec<Secondary>>,
     pub ohko: Option<OHKO>,
     #[serde(default)] 
     pub will_crit: bool,
@@ -87,7 +85,8 @@ pub struct Move {
     #[serde(default)] 
     pub multi_accuracy: bool,
     pub override_defensive_stat: Option<Stat>,
-    #[serde(default)] 
+    #[serde(default)]
+    #[serde(rename = "noPPBoosts")] 
     pub no_pp_boosts: bool,
     #[serde(default)] 
     pub sleep_usable: bool,
@@ -97,11 +96,64 @@ pub struct Move {
     pub steals_boosts: bool,
     #[serde(default)] 
     pub struggle_recoil: bool,
+    #[serde(default)]
+    pub multiaccuracy: bool,
+
+    #[serde(deserialize_with = "deserialize_self_boosts")]
+    #[serde(default)]
+    pub self_boost: Option<BoostsList>,
+    
+    #[serde(flatten)]
+    pub priorities: Option<Priorities>,
+    
+    #[serde(flatten)]
+    pub target_effects: Option<MoveEffects>,
+    #[serde(rename="self")]
+    pub self_effects: Option<MoveEffects>,
 }
 impl Move {
     pub fn has_flag(&self, flag: Flag) -> bool {
         self.flags.has_flag(flag)
     }
+}
+
+fn deserialize_self_boosts<'de, D>(deserializer: D) -> Result<Option<BoostsList>, D::Error> where D: Deserializer<'de> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let temp: Option<BoostsList> = match &value {
+        Value::Object(inner) => match inner.get("boosts") {
+            Some(value) => serde_json::from_value(value.clone()).ok(),
+            None => None
+        }
+        _ => None
+    };
+    temp.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for self boosts")))
+        .map(Option::Some)
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct Secondary {
+    #[serde(default)]
+    pub dustproof: bool, // Whether this gets stopped by shield dust
+
+    #[serde(flatten)]
+    pub target_effects: MoveEffects,
+    #[serde(rename = "self")]
+    pub self_effects: Option<MoveEffects>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct MoveEffects {
+    pub chance: Option<u8>,
+    pub boosts: Option<BoostsList>,
+    pub volatile_status: Option<VolatileStatus>,
+    pub side_condition: Option<SideCondition>,
+    pub pseudo_weather: Option<PseudoWeather>,
+    pub weather: Option<Weather>,
+    pub status: Option<Status>,
 }
 
 #[derive(Clone)]
@@ -119,7 +171,7 @@ impl<'de> Deserialize<'de> for MaxMove {
             serde_json::Value::String(s) => Some(MaxMove::ForPokemon(s.clone())),
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not valid for ignore immunity")
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for ignore immunity")
     ))
     }
 }
@@ -149,7 +201,7 @@ impl<'de> Deserialize<'de> for IgnoreImmunity {
             },
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not valid for ignore immunity")
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for ignore immunity")
     ))
     }
 }
@@ -169,7 +221,7 @@ impl<'de> Deserialize<'de> for Accuracy {
             serde_json::Value::Bool(true) => Some(Accuracy::AlwaysHits),
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not valid for accuracy")
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for accuracy")
     ))
     }
 }
@@ -195,34 +247,52 @@ impl<'de> Deserialize<'de> for AlternativeDamage {
             serde_json::Value::String(_) => serde_json::from_value(value.clone()).map(AlternativeDamage::Unique).ok(),
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not valid for alternative damage")
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for alternative damage")
     ))
     }
 }
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum MultiHit {
+#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum NumberOfHits {
+    #[default]
+    Normal,
     Constant(u8),
     Range(u8, u8)
 }
-impl<'de> Deserialize<'de> for MultiHit {
+impl NumberOfHits {
+    pub fn max(self) -> u8 {
+        match self {
+            Self::Normal => 1,
+            Self::Constant(n) => n,
+            Self::Range(_, max) => max,
+        }
+    }
+    pub fn min(self) -> u8 {
+        match self {
+            Self::Normal => 1,
+            Self::Constant(n) => n,
+            Self::Range(min, _) => min,
+        }
+    }
+}
+impl<'de> Deserialize<'de> for NumberOfHits {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
             D: serde::Deserializer<'de> {
         let value = serde_json::Value::deserialize(deserializer)?;
         let result = match &value {
-            serde_json::Value::Number(n) => n.as_u64().and_then(|n| n.try_into().ok()).map(MultiHit::Constant),
+            serde_json::Value::Number(n) => n.as_u64().and_then(|n| n.try_into().ok()).map(NumberOfHits::Constant),
             serde_json::Value::Array(a) => match &a[..] {
                 [serde_json::Value::Number(a), serde_json::Value::Number(b)] =>
                     a.as_u64().and_then(|a| a.try_into().ok()).and_then(|a| 
                         b.as_u64().and_then(|b| b.try_into().ok()).map(|b| 
-                            MultiHit::Range(a, b)
+                            NumberOfHits::Range(a, b)
                         )
                     ),
                 _ => None
             },
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not valid for accuracy")
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for accuracy")
     ))
     }
 }
@@ -295,11 +365,11 @@ impl<'de> Deserialize<'de> for FlagList {
             },
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not a valid list of flags")))
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not a valid list of flags")))
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BoostsList(pub Vec<(Stat, i8)>);
 impl<'de> Deserialize<'de> for BoostsList {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -313,7 +383,7 @@ impl<'de> Deserialize<'de> for BoostsList {
             },
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not a valid list of boosts")))
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not a valid list of boosts")))
     }
 }
 
@@ -423,6 +493,16 @@ pub enum VolatileStatus {
     Encore,
     RagePowder,
     Yawn,
+    Flinch,
+    MustRecharge,
+    Roost,
+    LockedMove,
+    Rage,
+    GlaiveRush,
+    UpRoar,
+    SaltCure,
+    SparklingAria,
+    SyrupBomb,
 
     // Past Volatile Statuses
     MudSport,
@@ -453,18 +533,14 @@ pub enum SideCondition {
     LightScreen,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SelfSwitch {
     True,
+    #[default]
     False,
     Unique(UniqueSelfSwitch)
 }
-impl Default for SelfSwitch {
-    fn default() -> Self {
-        Self::False
-    }
-}
-#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum UniqueSelfSwitch {
     CopyVolatile,
@@ -481,12 +557,12 @@ impl<'de> Deserialize<'de> for SelfSwitch {
             serde_json::Value::String(_) => serde_json::from_value(value.clone()).map(SelfSwitch::Unique).ok(),
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not valid for a self switch")))
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for a self switch")))
     }
 }
 
 
-#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Weather {
     Sandstorm,
     #[serde(rename = "sunnyday")]
@@ -516,6 +592,8 @@ pub enum Status {
     Sleep,
     #[serde(rename = "psn")]
     Poison,
+    #[serde(rename = "frz")]
+    Frozen,
 }
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Terrain {
@@ -566,7 +644,7 @@ impl<'de> Deserialize<'de> for OHKO {
             serde_json::Value::String(_) => serde_json::from_value(value.clone()).map(OHKO::Unique).ok(),
             _ => None
         };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not valid for OHKO")))
+        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for OHKO")))
     }
 }
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -589,4 +667,37 @@ pub enum SlotCondition {
     RevivalBlessing,
     #[serde(rename = "Wish")]
     Wish,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct ZMoveData {
+    pub base_power: Option<u8>,
+    pub boost: Option<BoostsList>,
+    pub effect: Option<String> //TODO
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct MaxMoveData {
+    pub base_power: Option<u8>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct Condition {
+    #[serde(default)]
+    pub no_copy: bool,
+    pub duration: Option<u8>,
+    pub counter_max: Option<u16>,
+
+    pub on_invulnerability: Option<bool>,
+    pub on_critical_hit: Option<bool>,
+    pub on_lock_move: Option<String>,
+
+    #[serde(flatten)]
+    pub priorities: Priorities,
 }

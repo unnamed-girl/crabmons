@@ -3,13 +3,14 @@ use std::{collections::HashMap, marker::PhantomData};
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::{Map, Value};
 
-use crate::{dex::Dex, generation::{Generation, LATEST_GENERATION}, learnsets::Learnset, moves::{Move, NonStandardReason}, natures::NatureData, species::Species, types::TypeData};
+use crate::{dex::Dex, generation::{Generation, LATEST_GENERATION}, items::ItemData, learnsets::Learnset, moves::{Move, NonStandardReason}, natures::NatureData, species::Species, types::TypeData};
 
 const SPECIES_JSON: &str = include_str!("../data/species.json");
 const MOVES_JSON: &str = include_str!("../data/moves.json");
 const LEARNSETS_JSON: &str = include_str!("../data/learnsets.json");
 const TYPES_JSON: &str = include_str!("../data/types.json");
 const NATURES_JSON: &str = include_str!("../data/natures.json");
+const ITEMS_JSON: &str = include_str!("../data/items.json");
 
 trait Dexable {
     fn set_future(&mut self, gen: Generation); // Usually just check if this is a Future move.
@@ -23,7 +24,7 @@ impl Default for Dex {
 }
 impl Dex {
     pub fn generation_dex(gen: Generation) -> Self {
-        Self::new(gen_data(gen), gen_data(gen), gen_data(gen), gen_data(gen), gen_data(gen))
+        Self::new(gen_data(gen), gen_data(gen), gen_data(gen), gen_data(gen), gen_data(gen), gen_data(gen))
     }
 }
 
@@ -94,7 +95,7 @@ impl Dexable for Move {
             }
         };
         if first_generation > gen {
-            self.is_non_standard = Some(NonStandardReason::Future)
+            self.is_nonstandard = Some(NonStandardReason::Future)
         }
     }
 }
@@ -130,7 +131,7 @@ impl Dexable for Species {
                 _ => panic!("Unreachable")
         });
         if generation > gen {
-            self.is_non_standard = Some(NonStandardReason::Future)
+            self.is_nonstandard = Some(NonStandardReason::Future)
         }
     }
 }
@@ -146,5 +147,16 @@ impl Dexable for NatureData {
     fn set_future(&mut self, _gen: Generation) {}
     fn get_json() -> &'static str {
         NATURES_JSON
+    }
+}
+
+impl Dexable for ItemData {
+    fn set_future(&mut self, gen: Generation) {
+        if self.gen > gen {
+            self.is_nonstandard = Some(NonStandardReason::Future);
+        }
+    }
+    fn get_json() -> &'static str {
+        ITEMS_JSON
     }
 }

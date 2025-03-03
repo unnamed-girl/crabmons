@@ -6,7 +6,7 @@ use serde_variant::to_variant_name;
 use crate::{dex::Identifier, species::Stat};
 
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum Nature {
     Hardy,
     Lonely,
@@ -46,6 +46,8 @@ impl Identifier for Nature {
 }
 
 #[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct NatureData {
     pub name: String,
     pub plus: Option<Stat>,

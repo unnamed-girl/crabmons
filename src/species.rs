@@ -1,16 +1,21 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use serde_json::Value;
 
-use crate::{moves::NonStandardReason, types::Type};
+use crate::{generation::Generation, learnsets::Gender, moves::NonStandardReason, types::Type};
 
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct Species {
     pub num: i32,
     pub name: String,
     pub types: Vec<Type>,
+    /// Generation of a custom pokemon
+    pub gen: Option<Generation>,
     pub gender_ratio: Option<GenderRatio>,
+    pub gender: Option<Gender>,
     pub base_stats: StatDistribution,
     pub abilities: HashMap<char, Ability>,
     pub weightkg: f32,
@@ -19,6 +24,7 @@ pub struct Species {
     pub egg_groups: Vec<String>, // TODO enum,
     pub prevo: Option<String>,
     pub evo_level: Option<u8>,
+    pub evo_item: Option<String>,
     #[serde(default)]
     pub other_formes: Vec<String>,
     #[serde(default)]
@@ -27,7 +33,7 @@ pub struct Species {
     pub base_species: Option<String>,
     pub forme: Option<String>, // TODO enum
     pub required_item: Option<String>,
-    pub is_non_standard: Option<NonStandardReason>,
+    pub is_nonstandard: Option<NonStandardReason>,
     pub changes_from: Option<String>,
     pub evo_condition: Option<String>,
     pub evo_type: Option<String>, // TODO enum,
@@ -44,7 +50,9 @@ pub struct Species {
     #[serde(rename = "maxHP")]
     pub max_hp: Option<u8>,
     pub required_ability: Option<String>,
-    // battle_only TODO
+    #[serde(deserialize_with = "deserialize_battle_only")]
+    #[serde(default)]
+    pub battle_only: Option<Vec<String>>,
     pub required_move: Option<String>,
     #[serde(default)]
     pub required_items: Vec<String>,
@@ -57,20 +65,39 @@ pub struct Species {
     pub male_only_hidden: bool,
 }
 
+fn deserialize_battle_only<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error> where D: Deserializer<'de> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let temp: Option<Vec<String>> = match &value {
+        Value::Array(n) => n.iter().cloned().map(serde_json::from_value::<String>).collect::<Result<_, _>>().ok(),
+        Value::String(s) => Some(vec![s.clone()]),
+        _ => None
+    };
+    temp.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for battle only")))
+        .map(Option::Some)
+}
+
 #[derive(Deserialize, PartialEq, Clone, Copy, Debug)]
 #[serde(rename_all = "UPPERCASE")]
+#[serde(deny_unknown_fields)]
 pub struct GenderRatio {
     pub f: f32,
     pub m: f32
 }
 
 #[derive(Deserialize, Default, PartialEq, Eq, Debug, Clone, Copy)]
+#[serde(deny_unknown_fields)]
 pub struct StatDistribution {
+    #[serde(default)]
     pub hp: u8,
+    #[serde(default)]
     pub atk: u8,
+    #[serde(default)]
     pub def: u8,
+    #[serde(default)]
     pub spa: u8,
+    #[serde(default)]
     pub spd: u8,
+    #[serde(default)]
     pub spe: u8
 }
 impl StatDistribution {
@@ -103,7 +130,7 @@ impl From<[u8;6]> for StatDistribution {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Deserialize)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Deserialize, Debug)]
 pub enum Stat {
     #[serde(rename = "hp")]
     HP,

@@ -47,6 +47,7 @@ impl Identifier for &Type {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TypeData {
     #[serde(rename = "damageTaken")]
     damage_taken: HashMap<Type, DamageRelation>,
@@ -55,7 +56,7 @@ pub struct TypeData {
     #[serde(rename = "HPdvs")]
     pub hpdvs: Option<HashMap<Stat, u8>>,
     #[serde(rename = "isNonstandard")]
-    pub is_non_standard: Option<NonStandardReason>,
+    pub is_nonstandard: Option<NonStandardReason>,
 }
 impl TypeData {
     pub fn damage_taken(&self, type_: Type) -> DamageRelation {
@@ -72,6 +73,16 @@ pub enum DamageRelation {
     SuperEffective,
     NotVeryEffective,
     Immune
+}
+impl DamageRelation {
+    pub fn to_multiplier(self) -> f32 {
+        match self {
+            Self::Neutral => 1.0,
+            Self::SuperEffective => 2.0,
+            Self::NotVeryEffective => 0.5,
+            Self::Immune => 0.0,
+        }
+    }
 }
 
 pub struct TryIntoDamageRelationError;
