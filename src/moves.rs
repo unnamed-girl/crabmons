@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 
-use crate::{items::Priorities, species::Stat, types::Type};
+use crate::{items::Priorities, parsing_utils::{impl_from_either, impl_try_from_either, Either, NotImplemented, deserialize_via}, species::Stat, types::Type};
 
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -35,8 +34,8 @@ pub struct Move {
     #[serde(default)] 
     pub base_power_callback: bool,
     pub condition: Option<Condition>,
-    #[serde(default)]
     #[serde(rename = "multihit")]
+    #[serde(default)]
     pub number_of_hits: NumberOfHits,
     #[serde(default)] 
     pub calls_move: bool,
@@ -44,7 +43,7 @@ pub struct Move {
     pub has_crash_damage: bool,
     #[serde(default)] 
     pub stalling_move: bool,
-    #[serde(default)] 
+    #[serde(default)]
     pub self_switch: SelfSwitch,
     #[serde(default)]
     pub ignore_immunity: IgnoreImmunity,
@@ -72,7 +71,8 @@ pub struct Move {
     #[serde(default)] 
     pub will_crit: bool,
     pub override_offensive_pokemon: Option<OverrideOffensivePokemon>,
-    pub is_max: Option<MaxMove>, 
+    #[serde(default)]
+    pub is_max: IsMaxMove, 
     #[serde(default)] 
     pub ignore_ability: bool,
     pub slot_condition: Option<SlotCondition>,
@@ -99,7 +99,7 @@ pub struct Move {
     #[serde(default)]
     pub multiaccuracy: bool,
 
-    #[serde(deserialize_with = "deserialize_self_boosts")]
+    #[serde(deserialize_with = "deserialize_via::<_, Option<BoostsList>, _SelfBoost>")]
     #[serde(default)]
     pub self_boost: Option<BoostsList>,
     
@@ -117,17 +117,14 @@ impl Move {
     }
 }
 
-fn deserialize_self_boosts<'de, D>(deserializer: D) -> Result<Option<BoostsList>, D::Error> where D: Deserializer<'de> {
-    let value = serde_json::Value::deserialize(deserializer)?;
-    let temp: Option<BoostsList> = match &value {
-        Value::Object(inner) => match inner.get("boosts") {
-            Some(value) => serde_json::from_value(value.clone()).ok(),
-            None => None
-        }
-        _ => None
-    };
-    temp.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for self boosts")))
-        .map(Option::Some)
+#[derive(Deserialize)]
+struct _SelfBoost {
+    boosts: BoostsList
+}
+impl From<_SelfBoost> for Option<BoostsList> {
+    fn from(value: _SelfBoost) -> Self {
+        Some(value.boosts)
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -156,108 +153,139 @@ pub struct MoveEffects {
     pub status: Option<Status>,
 }
 
-#[derive(Clone)]
-pub enum MaxMove {
-    TypeBased,
+#[derive(Clone, Deserialize, Debug, Default)]
+#[serde(from = "Either<bool, String>")]
+pub enum IsMaxMove {
+    #[default]
+    NotAMaxMove,
+    GenericMaxMove,
     ForPokemon(String)
 }
-impl<'de> Deserialize<'de> for MaxMove {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Bool(true) => Some(MaxMove::TypeBased),
-            serde_json::Value::String(s) => Some(MaxMove::ForPokemon(s.clone())),
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for ignore immunity")
-    ))
+impl_from_either!(IsMaxMove, bool, String);
+impl From<bool> for IsMaxMove {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::GenericMaxMove
+        } else {
+            Self::NotAMaxMove
+        }
+    }
+}
+impl From<String> for IsMaxMove {
+    fn from(value: String) -> Self {
+        Self::ForPokemon(value)
+    }
+}
+impl From<IsMaxMove> for bool {
+    fn from(value: IsMaxMove) -> Self {
+        match value {
+            IsMaxMove::GenericMaxMove | IsMaxMove::ForPokemon(_) => true,
+            IsMaxMove::NotAMaxMove => false,
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Debug, Default)]
+#[serde(from = "Either<bool, HashMap<Type, bool>>")]
 pub enum IgnoreImmunity {
-    True,
-    False,
+    #[default]
+    DoesntIgnoreImmunity,
+    IgnoresImmunity,
     Types(Vec<Type>)
 }
-impl Default for IgnoreImmunity {
-    fn default() -> Self {
-        Self::False
+type IgnoreImmunityTypeMap = HashMap<Type, bool>;
+impl_from_either!(IgnoreImmunity, bool, IgnoreImmunityTypeMap);
+
+impl From<bool> for IgnoreImmunity {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::IgnoresImmunity
+        } else {
+            Self::DoesntIgnoreImmunity
+        }
     }
 }
-impl<'de> Deserialize<'de> for IgnoreImmunity {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Bool(true) => Some(IgnoreImmunity::True),
-            serde_json::Value::Bool(false) => Some(IgnoreImmunity::False),
-            serde_json::Value::Object(_) => {
-                    let types: Option<HashMap<Type, bool>> = serde_json::from_value(value.clone()).ok();
-                    types.map(|m| IgnoreImmunity::Types(m.into_keys().collect()))
-            },
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for ignore immunity")
-    ))
+impl From<HashMap<Type, bool>> for IgnoreImmunity {
+    fn from(value: HashMap<Type, bool>) -> Self {
+        Self::Types(
+            value.into_iter().filter(|(_, immune)| *immune)
+                .map(|(type_, _)| type_)
+                .collect()
+        )
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(try_from = "Either<bool, u8>")]
 pub enum Accuracy {
     AlwaysHits,
     Percent(u8)
 }
-impl<'de> Deserialize<'de> for Accuracy {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Number(n) => n.as_u64().and_then(|n| n.try_into().ok()).map(Accuracy::Percent),
-            serde_json::Value::Bool(true) => Some(Accuracy::AlwaysHits),
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for accuracy")
-    ))
+impl_try_from_either!(Accuracy, bool, u8, NotImplemented, Infallible);
+impl TryFrom<bool> for Accuracy {
+    type Error = NotImplemented;
+    fn try_from(value: bool) -> Result<Self, Self::Error> {
+        if value {
+            Ok(Self::AlwaysHits)
+        } else {
+            Err(NotImplemented("False accuracy not implemented"))
+        }
+    }
+}
+impl From<u8> for Accuracy {
+    fn from(value: u8) -> Self {
+        Self::Percent(value)
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Clone, PartialEq, Eq, Debug)]
+#[serde(from = "Either<u8, UniqueDamage>")]
 pub enum AlternativeDamage {
     Flat(u8),
     Unique(UniqueDamage)
 }
+impl_from_either!(AlternativeDamage, u8, UniqueDamage);
+impl From<u8> for AlternativeDamage {
+    fn from(value: u8) -> Self {
+        Self::Flat(value)
+    }
+}
+impl From<UniqueDamage> for AlternativeDamage {
+    fn from(value: UniqueDamage) -> Self {
+        Self::Unique(value)
+    }
+}
+
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum UniqueDamage {
     #[serde(rename = "level")]
     Level
 }
-impl<'de> Deserialize<'de> for AlternativeDamage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Number(n) => n.as_u64().and_then(|n| n.try_into().ok()).map(AlternativeDamage::Flat),
-            serde_json::Value::String(_) => serde_json::from_value(value.clone()).map(AlternativeDamage::Unique).ok(),
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for alternative damage")
-    ))
-    }
-}
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(from = "Either<u8, [u8; 2]>")]
 pub enum NumberOfHits {
     #[default]
     Normal,
     Constant(u8),
     Range(u8, u8)
 }
+
+type NumberOfHitsRange = [u8; 2];
+impl_from_either!(NumberOfHits, u8, NumberOfHitsRange);
+
+impl From<u8> for NumberOfHits {
+    fn from(value: u8) -> Self {
+        Self::Constant(value)
+    }
+}
+impl From<[u8; 2]> for NumberOfHits {
+    fn from(value: [u8; 2]) -> Self {
+        Self::Range(value[0], value[1])
+    }
+}
+
 impl NumberOfHits {
     pub fn max(self) -> u8 {
         match self {
@@ -272,28 +300,6 @@ impl NumberOfHits {
             Self::Constant(n) => n,
             Self::Range(min, _) => min,
         }
-    }
-}
-impl<'de> Deserialize<'de> for NumberOfHits {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Number(n) => n.as_u64().and_then(|n| n.try_into().ok()).map(NumberOfHits::Constant),
-            serde_json::Value::Array(a) => match &a[..] {
-                [serde_json::Value::Number(a), serde_json::Value::Number(b)] =>
-                    a.as_u64().and_then(|a| a.try_into().ok()).and_then(|a| 
-                        b.as_u64().and_then(|b| b.try_into().ok()).map(|b| 
-                            NumberOfHits::Range(a, b)
-                        )
-                    ),
-                _ => None
-            },
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for accuracy")
-    ))
     }
 }
 
@@ -346,47 +352,31 @@ pub enum Flag {
     Wind,
 }
 
-#[derive(Clone)]
+#[derive(Deserialize, Clone, Debug)]
+#[serde(from = "HashMap<Flag, u8>")]
 pub struct FlagList(pub Vec<Flag>);
 impl FlagList {
     pub fn has_flag(&self, flag: Flag) -> bool {
         self.0.contains(&flag)
     }
 }
-impl<'de> Deserialize<'de> for FlagList {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Object(_) => {
-                let flags: Option<HashMap<Flag, Value>> = serde_json::from_value(value.clone()).ok();
-                flags.map(|m| FlagList(m.into_keys().collect()))
-            },
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not a valid list of flags")))
+impl From<HashMap<Flag, u8>> for FlagList {
+    fn from(value: HashMap<Flag, u8>) -> Self {
+        FlagList(value.into_iter()
+            .filter(|(_, has_flag)| *has_flag == 1)
+            .map(|(flag, _)| flag)
+            .collect())
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
+#[serde(from = "HashMap<Stat, i8>")]
 pub struct BoostsList(pub Vec<(Stat, i8)>);
-impl<'de> Deserialize<'de> for BoostsList {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Object(_) => {
-                let flags: Option<HashMap<Stat, i8>> = serde_json::from_value(value.clone()).ok();
-                flags.map(|m| BoostsList(m.into_iter().collect()))
-            },
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not a valid list of boosts")))
+impl From<HashMap<Stat, i8>> for BoostsList {
+    fn from(value: HashMap<Stat, i8>) -> Self {
+        BoostsList(value.into_iter().collect())
     }
 }
-
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -533,34 +523,36 @@ pub enum SideCondition {
     LightScreen,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(from = "Either<bool, UniqueSelfSwitch>")]
 pub enum SelfSwitch {
     True,
     #[default]
     False,
     Unique(UniqueSelfSwitch)
 }
+impl_from_either!(SelfSwitch, bool, UniqueSelfSwitch);
+impl From<bool> for SelfSwitch {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::True
+        } else {
+            Self::False
+        }
+    }
+}
+impl From<UniqueSelfSwitch> for SelfSwitch {
+    fn from(value: UniqueSelfSwitch) -> Self {
+        Self::Unique(value)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum UniqueSelfSwitch {
     CopyVolatile,
     ShedTail,
 }
-impl<'de> Deserialize<'de> for SelfSwitch {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Bool(true) => Some(SelfSwitch::True),
-            serde_json::Value::Bool(false) => Some(SelfSwitch::False),
-            serde_json::Value::String(_) => serde_json::from_value(value.clone()).map(SelfSwitch::Unique).ok(),
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for a self switch")))
-    }
-}
-
 
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Weather {
@@ -629,24 +621,29 @@ pub enum PseudoWeather {
     MudSport,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(try_from = "Either<bool, UniqueOHKO>")]
 pub enum OHKO {
     Regular,
     Unique(UniqueOHKO)
 }
-impl<'de> Deserialize<'de> for OHKO {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Bool(true) => Some(OHKO::Regular),
-            serde_json::Value::String(_) => serde_json::from_value(value.clone()).map(OHKO::Unique).ok(),
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for OHKO")))
+impl_try_from_either!(OHKO, bool, UniqueOHKO, NotImplemented, Infallible);
+impl TryFrom<bool> for OHKO {
+    type Error = NotImplemented;
+    fn try_from(value: bool) -> Result<Self, Self::Error> {
+        if value {
+            Ok(Self::Regular)
+        } else {
+            Err(NotImplemented("False OHKO not implemented"))
+        }
     }
 }
+impl From<UniqueOHKO> for OHKO {
+    fn from(value: UniqueOHKO) -> Self {
+        Self::Unique(value)
+    }
+}
+
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum UniqueOHKO {
     Ice

@@ -12,7 +12,7 @@ fn main() -> Result<(), DexError> {
     calc.ceiled_multiply(100.0/(defender.stat(Stat::HP) as f32));
     println!("{:?}", calc);
 
-    println!("{:?}", dex.move_("thunderwave")?.z_move);
+    println!("{:?}", dex.move_("clangingscales")?.self_boost);
     println!("{:?}", dex.item("kingsrock")?.fling);
     Ok(())
 }

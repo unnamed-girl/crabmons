@@ -78,7 +78,7 @@ impl Dexable for Move {
             return
         }
 
-        let first_generation = if self.is_max.is_some() {
+        let first_generation = if self.is_max.clone().into() { //TODO cleanup
             Generation::Eight
         } else {
             match self.num {

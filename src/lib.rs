@@ -8,6 +8,7 @@ pub mod natures;
 pub mod pokemon;
 pub mod damage_calc;
 pub mod items;
+pub(crate) mod parsing_utils;
 
 #[cfg(feature = "real_data")]
 pub mod real_data;

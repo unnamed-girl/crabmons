@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::{generation::Generation, moves::{BoostsList, Condition, NonStandardReason, Status, VolatileStatus}, types::Type};
+use crate::{generation::Generation, moves::{BoostsList, Condition, NonStandardReason, Status, VolatileStatus}, parsing_utils::{impl_try_from_either, Either, NotImplemented}, types::Type};
 
 fn some_true() -> Option<bool> {
     Some(true)
@@ -84,25 +84,28 @@ pub struct NaturalGiftData {
     pub type_: Type,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Clone, PartialEq, Eq, Debug)]
+#[serde(try_from = "Either<bool, String>")]
 pub enum ZCrystalData {
     Generic,
     Unique(String)
 }
-impl<'de> Deserialize<'de> for ZCrystalData {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Bool(true) => Some(ZCrystalData::Generic),
-            serde_json::Value::String(base) => Some(ZCrystalData::Unique(base.clone())),
-            _ => None
-        };
-        result.ok_or(serde::de::Error::custom(format!("{value} is not valid for a ZMove")))
+impl_try_from_either!(ZCrystalData, bool, String, NotImplemented, Infallible);
+impl TryFrom<bool> for ZCrystalData {
+    type Error = NotImplemented;
+    fn try_from(value: bool) -> Result<Self, Self::Error> {
+        if value {
+            Ok(Self::Generic)
+        } else {
+            Err(NotImplemented("zMove: false not implemented"))
+        }
     }
 }
-
+impl From<String> for ZCrystalData {
+    fn from(value: String) -> Self {
+        Self::Unique(value)
+    }
+}
 
 #[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]

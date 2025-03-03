@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::{generation::Generation, natures::Nature, species::StatDistribution};
+use crate::{parsing_utils::{Either, NotImplemented}, generation::Generation, natures::Nature, species::StatDistribution};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,7 +34,6 @@ pub struct EncounterData {
     pub max_egg_moves: Option<u8>,
     pub abilities: Option<Vec<String>>,
     pub gender: Option<Gender>,
-    #[serde(default)]
     pub shiny: EventShiny,
     pub nature: Option<Nature>,
     #[serde(default)]
@@ -56,24 +55,21 @@ pub enum Gender {
     Unknown
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(try_from = "Option<Either<bool, u8>>")]
 pub enum EventShiny {
     Shiny,
     CanBeEither,
-    #[default]
     NotShiny
 }
-impl<'de> Deserialize<'de> for EventShiny {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let result = match &value {
-            serde_json::Value::Bool(true) => Some(EventShiny::Shiny),
-            serde_json::Value::Number(n) => if n.as_u64().is_some_and(|n| n == 1) {Some(EventShiny::CanBeEither)} else {None},
-            _ => None
-        };
-        result.ok_or_else(|| serde::de::Error::custom(format!("{value} is not valid for an event shiny")
-    ))
+impl TryFrom<Option<Either<bool, u8>>> for EventShiny {
+    type Error = NotImplemented;
+    fn try_from(value: Option<Either<bool, u8>>) -> Result<Self, Self::Error> {
+        match value {
+            Some(Either::A(true)) => Ok(Self::Shiny),
+            None | Some(Either::A(false)) => Ok(Self::NotShiny),
+            Some(Either::B(1)) => Ok(Self::CanBeEither),
+            Some(Either::B(_)) => Err(NotImplemented("Only 'true', 'false' or '1' are valid for shiny"))
+        }
     }
 }
