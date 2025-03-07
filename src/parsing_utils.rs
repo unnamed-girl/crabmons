@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use serde::{Deserialize, Deserializer};
 
 #[derive(Deserialize, Debug)]
@@ -16,6 +16,8 @@ impl<A,B> Display for Either<A, B> where A:Display, B:Display {
     }
 }
 
+/// **impl_from_either!(T, A, B)** where A:Into\<T> and B: Into\<T>.\
+/// Impements From\<Either\<A, B>> for T. 
 macro_rules! impl_from_either {
     ($structname: ident, $a: ident, $b: ident) => {
           impl From<Either<$a, $b>> for $structname {
@@ -30,11 +32,12 @@ macro_rules! impl_from_either {
 }
 pub(crate) use impl_from_either;
 
-/// impl_try_from_either!(t, a, b, error_a, error_b) where T: TryFrom\<A> and T: TryFrom\<B>
+/// **impl_try_from_either!(T, A, B, Error)** where T: TryFrom\<A>, T: TryFrom\<B>.\
+/// Implement TryFrom\<Either\<A, B>> for T. The Error type is the given Error type.\
 /// 
-/// implements TryFrom\<Either\<a, b>> for t
-/// 
-/// The error type is Either\<error_a, error_b>. If one is infallible the error type is the non infallible error instead.
+/// **impl_try_from_either!(T, A, B, ErrorA, ErrorB)** where T: TryFrom\<A>, T: TryFrom\<B>.\
+/// Implement TryFrom\<Either\<A, B>> for T. The Error type is Either\<ErrorA, ErrorB>.\
+/// If either is Infallible, though, instead the Error type is the noninfallible error.\
 macro_rules! impl_try_from_either {
     ($t: ident, $a: ident, $b: ident, $error: ident) => {
         impl TryFrom<Either<$a, $b>> for $t {

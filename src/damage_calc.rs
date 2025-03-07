@@ -1,8 +1,9 @@
 use std::fmt::{Debug, Display};
 
-use crate::moves::{Category, Flag, Move, OverrideOffensivePokemon};
+use crate::moves::{Category, Flag, MoveData, OverrideOffensivePokemon};
+use crate::names::abilities::Ability;
 use crate::pokemon::Pokemon;
-use crate::species::{Ability, Stat};
+use crate::species::Stat;
 use crate::dex::{Dex, DexError, Identifier};
 use crate::types::Type;
 
@@ -52,7 +53,7 @@ fn pokemon_round(value: CalcFloat) -> CalcFloat {
 
 const ZERO_DAMAGE: DamageRange = DamageRange([0;16]);
 
-fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, doubles: bool) -> DamageRange {
+fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &MoveData, doubles: bool) -> DamageRange {
     if move_.category == Category::Status {
         return ZERO_DAMAGE;
     }
@@ -99,7 +100,7 @@ fn damage_calc(dex: &Dex, attacker: &Pokemon, defender: &Pokemon, move_: &Move, 
     if move_.has_flag(Flag::Sound) && attacker.ability == Ability::LiquidVoice {
         current_move_type = Type::Water
     };
-    if attacker.ability == Ability::Normalize && move_.is_z.is_none() && !["hiddenpower", "weatherball", "naturalgift", "technoblast", "judgment", "multiattack", "terrainpulse"].contains(&move_.name.as_str()) {
+    if attacker.ability == Ability::Normalize && move_.z_move.is_none() && !["hiddenpower", "weatherball", "naturalgift", "technoblast", "judgment", "multiattack", "terrainpulse"].contains(&move_.name.as_str()) {
         current_move_type = Type::Normal;
     }
 
@@ -257,12 +258,12 @@ impl MaybeAPokemon for Pokemon<'_> {}
 impl MaybeAPokemon for () {}
 
 pub trait MaybeAMove {}
-impl MaybeAMove for &Move {}
+impl MaybeAMove for &MoveData {}
 impl MaybeAMove for () {}
 
 #[derive(Clone, Copy)]
 pub struct CalcBuilder<'a, Attacker: MaybeAPokemon, Defender: MaybeAPokemon, Move: MaybeAMove>(&'a Dex, Attacker, Defender, Move);
-type ReadyCalc<'a> = CalcBuilder<'a, Pokemon<'a>, Pokemon<'a>, &'a Move>;
+type ReadyCalc<'a> = CalcBuilder<'a, Pokemon<'a>, Pokemon<'a>, &'a MoveData>;
 
 impl Display for ReadyCalc<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -296,16 +297,16 @@ impl<'a, A: MaybeAPokemon, B: MaybeAMove> CalcBuilder<'a, A, (), B> {
     }
 }
 impl<'a, A: MaybeAPokemon, D: MaybeAPokemon> CalcBuilder<'a, A, D, ()> {
-    pub fn move_<Id: Identifier>(self, move_:Id) -> Result<CalcBuilder<'a, A, D, &'a Move>, DexError> {
+    pub fn move_<Id: Identifier>(self, move_:Id) -> Result<CalcBuilder<'a, A, D, &'a MoveData>, DexError> {
         let move_ = self.0.move_(move_)?;
         Ok(CalcBuilder(self.0, self.1, self.2, move_))
     }
 }
 impl<'a> CalcBuilder<'a, Pokemon<'a>, Pokemon<'a>, ()> {
-    pub fn all_possible_attacks(self) -> Result<Vec<CalcBuilder<'a, Pokemon<'a>, Pokemon<'a>, &'a Move>>, DexError> {
+    pub fn all_possible_attacks(self) -> Result<Vec<CalcBuilder<'a, Pokemon<'a>, Pokemon<'a>, &'a MoveData>>, DexError> {
         let learnset = self.0.learnset(&self.1.species.name)?;
-        Ok(learnset.all_moves().iter()
-            .flat_map(|move_| self.move_(move_))
+        Ok(learnset.all_moves().into_iter()
+            .flat_map(|move_| self.move_(*move_))
             .collect()
         )  
     }

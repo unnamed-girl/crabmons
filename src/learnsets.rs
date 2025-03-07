@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::{parsing_utils::{Either, NotImplemented}, generation::Generation, natures::Nature, species::StatDistribution};
+use crate::{generation::Generation, names::moves::Move, natures::Nature, parsing_utils::{Either, NotImplemented}, species::StatDistribution};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct Learnset {
-    pub learnset: Option<HashMap<String, Vec<String>>>,
+    pub learnset: Option<HashMap<Move, Vec<String>>>,
     pub event_data: Option<Vec<EncounterData>>,
     #[serde(default)]
     pub encounters: Vec<EncounterData>,
@@ -16,7 +16,7 @@ pub struct Learnset {
     pub event_only: bool,
 }
 impl Learnset {
-    pub fn all_moves(&self) -> Vec<&String> {
+    pub fn all_moves(&self) -> Vec<&Move> {
         self.learnset
             .as_ref()
             .map_or_else(Vec::new, |learnset| learnset.keys().collect())

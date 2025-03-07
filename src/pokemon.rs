@@ -1,4 +1,5 @@
-use crate::{natures::NatureData, species::{Ability, Species, Stat, StatDistribution}};
+use crate::{natures::NatureData, species::{Species, Stat, StatDistribution}};
+use crate::names::abilities::Ability;
 
 #[derive(Clone, Copy)]
 pub struct Pokemon<'a> {

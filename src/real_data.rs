@@ -3,7 +3,7 @@ use std::{collections::HashMap, marker::PhantomData};
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::{Map, Value};
 
-use crate::{dex::Dex, generation::{Generation, LATEST_GENERATION}, items::ItemData, learnsets::Learnset, moves::{Move, NonStandardReason}, natures::NatureData, species::Species, types::TypeData};
+use crate::{dex::Dex, generation::{Generation, LATEST_GENERATION}, items::ItemData, learnsets::Learnset, moves::{MoveData, NonStandardReason}, natures::NatureData, species::Species, types::TypeData};
 
 const SPECIES_JSON: &str = include_str!("../data/species.json");
 const MOVES_JSON: &str = include_str!("../data/moves.json");
@@ -69,7 +69,7 @@ impl Dexable for TypeData {
     }
 }
 
-impl Dexable for Move {
+impl Dexable for MoveData {
     fn get_json() -> &'static str {
         MOVES_JSON
     }

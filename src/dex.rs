@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
-use crate::{items::ItemData, learnsets::Learnset, moves::Move, natures::NatureData, pokemon::Pokemon, species::Species, types::TypeData};
+use crate::{items::ItemData, learnsets::Learnset, moves::MoveData, natures::NatureData, pokemon::Pokemon, species::Species, types::TypeData};
 
 pub trait Identifier {
     fn as_identifier(&self) -> String;
@@ -12,7 +12,7 @@ impl<T: AsRef<str>> Identifier for T {
 }
 
 pub struct Dex {
-    moves: HashMap<String, Move>,
+    moves: HashMap<String, MoveData>,
     species: HashMap<String, Species>,
     types: HashMap<String, TypeData>,
     learnsets: HashMap<String, Learnset>,
@@ -24,12 +24,19 @@ pub struct Dex {
 pub enum DexError {
     NotFound(String)
 }
+impl Display for DexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound(value) => write!(f, "'{value}' not found"),
+        }
+    }
+}
 impl Dex {
-    pub fn new(moves: HashMap<String, Move>, species: HashMap<String, Species>, types: HashMap<String, TypeData>, learnsets: HashMap<String, Learnset>, natures: HashMap<String, NatureData>, items: HashMap<String, ItemData>) -> Self {
+    pub fn new(moves: HashMap<String, MoveData>, species: HashMap<String, Species>, types: HashMap<String, TypeData>, learnsets: HashMap<String, Learnset>, natures: HashMap<String, NatureData>, items: HashMap<String, ItemData>) -> Self {
         Self { moves, species, types, learnsets, natures, items }
     }
     
-    pub fn move_<Id: Identifier>(&self, identifier:Id) -> Result<&Move, DexError> {
+    pub fn move_<Id: Identifier>(&self, identifier:Id) -> Result<&MoveData, DexError> {
         self.moves.get(&identifier.as_identifier()).ok_or(DexError::NotFound(identifier.as_identifier()))
     }
     pub fn species<Id: Identifier>(&self, identifier:Id) -> Result<&Species, DexError> {
